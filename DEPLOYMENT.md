@@ -1,98 +1,105 @@
-# Fal MCP Deployment Guide
+# Fal MCP Server Deployment Guide
 
-## Quick Deploy Options
+## Overview
 
-### Option 1: Local Docker (Easiest)
+This guide covers deploying the Fal.ai MCP Server for cloud hosting on Render, AWS, or self-hosted Kubernetes.
+
+---
+
+## Quick Start (Render Cloud)
+
+### 1. Prerequisites
+
+- GitHub account with `Fal-mcp` repository
+- [MongoDB Atlas](https://www.mongodb.com/cloud/atlas/) account (free tier OK)
+- Python 3.12+ environment for key generation
+
+### 2. Generate Encryption Key (One-Time Setup)
 
 ```bash
-# Build locally
-docker build -t fal-mcp .
-
-# Run with environment variables set
-docker run --rm -p 8000:8000 \
-  -e MONGODB_URI="mongodb://localhost:27017" \
-  -e MONGODB_DATABASE="fal_mcp_keys" \
-  -e ENCRYPTION_KEY="<your-fernet-key>" \
-  fal-mcp:latest
+python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 ```
 
-### Option 2: Docker Compose (with MongoDB)
+**Copy the output** (43 characters). You will use this on Render Dashboard.
+
+### 3. Configure MongoDB Atlas
+
+1. Create free cluster → Get **connection string**
+2. Network Access: Whitelist Render IPs or `0.0.0.0/0` for dev
+3. Create database user with read/write access
+
+### 4. Render Dashboard Setup
+
+Go to your Render project settings:
+
+**Environment Variables (all required):**
 
 ```bash
-# Copy example env and generate encryption key
-mv .env.example .env
-uv run python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())" >> .env
-
-# Start with MongoDB included
-docker-compose up -d
-
-# Check logs
-docker-compose logs -f fal-mcp-server
+MONGODB_URI=mongodb+srv://user:pass@cluster.mongodb.net/fal_mcp_keys?retryWrites=true&w=majority
+DATABASE_NAME=fal_mcp_keys
+ENCRYPTION_KEY=<paste-key-from-step-2>
+HOST=0.0.0.0
+PORT=10000
+ENVIRONMENT=production
+ALLOWED_ORIGINS=*
+PUBLIC_URL=https://your-app.onrender.com
 ```
 
-### Option 3: Render.com Deployment (with MongoDB Atlas)
+**Build Settings:**
 
-#### Prerequisites:
-1. Create MongoDB Atlas database at [MongoDB Atlas](https://www.mongodb.com/cloud/atlas/)
-2. Get connection string from Atlas → Connect → Connect your application
-3. Replace `<MONGODB_URI>` in `.env` with your Atlas connection string
-4. Upload your `.env` to Render (with secrets configured)
+- Build command: `docker build -t fal-mcp .`
+- Start command: `uvicorn app.main:mcp --host 0.0.0.0 --port $PORT`
+- Health check: `/api/v1/health` (Render auto-detects)
 
-#### Deploy Steps on Render:
-1. Create new Web Service at [Render](https://render.com)
-2. Connect GitHub repo `nanabrownsnr/Fal-mcp`
-3. Set environment variables in Render dashboard:
-   - `MONGODB_URI=your-atlas-connection-string`
-   - `MONGODB_DATABASE=fal_mcp_keys`
-   - `ENCRYPTION_KEY=<generate-new-key>`
-   - `HOST=0.0.0.0`
-   - `PORT=10000` (Render uses 10000 instead of 8000)
+### 5. Deploy
 
-4. Build Command: `docker build -t fal-mcp .`
-5. Start Command: `uvicorn app.main:mcp --host 0.0.0.0 --port $SERVER_PORT`
+```bash
+# Commit & push after updating Dockerfile
+git add -A && git commit -m "Deploy fixes: Dockerfile, twynity routes" && git push origin main
+```
 
-### Option 4: Cloud Provider (AWS ECS / GCP Cloud Run / Azure Container Apps)
-
-For these platforms, you'll need to:
-1. Build Docker image and push to container registry
-2. Configure MongoDB connection as a database service
-3. Set same environment variables listed above
-4. Scale with zero-to-many instances depending on traffic
+Render will automatically redeploy! ✅
 
 ---
 
-## Troubleshooting Exit Code 128
+## Deployment Checklist
 
-This occurs when:
-- GitHub Actions tries to deploy without `.env` secrets
-- MongoDB is missing from deployment environment
-- API keys aren't properly encrypted in container
-
-**Solutions:**
-1. Use Render/Cloud provider (not raw Docker for production)
-2. Generate encryption key using command in `.env.example`
-3. Mount MongoDB volume or use managed database service
-4. Don't commit `.env` to git - use platform secrets
+- [ ] MongoDB Atlas cluster created and connected from Render IPs
+- [ ] `ENCRYPTION_KEY` generated (43 base64 chars)  
+- [ ] All environment variables set in Render Dashboard
+- [ ] Dockerfile updated (check commit on GitHub)
+- [ ] Main branch pushed to trigger deploy
 
 ---
 
-## Environment Variables Reference
+## Alternative: Self-Hosted Kubernetes/AWS ECS
 
-| Variable | Description | Example Value |
-|----------|-------------|---------------|
-| `MONGODB_URI` | MongoDB connection string | `mongodb://user:pass@host:27017/db` |
-| `MONGODB_DATABASE` | Database name | `fal_mcp_keys` |
-| `ENCRYPTION_KEY` | Fernet encryption key from CLI command | `<generated-key>` |
-| `HOST` | Server bind address | `0.0.0.0` or `localhost` |
-| `PORT` | Server port | `8000` or `10000` |
-| `ALLOWED_ORIGINS` | CORS origins | `*` or specific domains |
+Use same `Dockerfile` with container orchestrators. Example docker-compose:
+
+```yaml
+version: '3.8'
+services:
+  fal-mcp:
+    build: .
+    ports:
+      - "${HOST_IP}:10000:10000"
+    environment:
+      - MONGODB_URI=mongodb://mongo:27017/fal_mcp_keys
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY}
+      - DATABASE_NAME=fal_mcp_keys
+    depends_on:
+      - mongo
+  
+  mongo:
+    image: mongo:6.0
+
+# Generate .env from .render-env.example before build!
+```
 
 ---
 
-## Production Recommendations
+## Support
 
-- ✅ Use environment variables managed by your hosting platform
-- ✅ Enable health checks on all services
-- ✅ Monitor logs via cloud provider dashboards
-- ✅ Set proper resource limits (CPU/RAM)
-- ✅ Use MongoDB Atlas for production-grade database
+- Render Docs: https://render.com/docs/troubleshooting-deploys  
+- Fal Client: https://github.com/nanabrownsnr/fal-client  
+- MongoDB Connection Strings: https://mongodb.com/cloud/atlas/begin/setup-database/  

@@ -1,23 +1,35 @@
-# Render-Compatible Environment Variables
-# Copy this to your Render dashboard or local `.env` file
+# Render Environment Variables
+# Copy these to your Render Dashboard → Environment section
+# Required: All variables must be set for proper deployment
 
-# Required for FalMCP core functionality (DO NOT CHANGE THESE)
-DATABASE_NAME=fal_mcp
-ENCRYPTION_KEY=<GENERATE_THIS_WITH_PYTHON_COMMAND_BELOW>
-MONGODB_URI=mongodb://<user>:<password>@<host>:27017/<db>?authSource=admin
+# MongoDB Atlas Connection String (without auth token in public repos)
+# Get this from: https://cloud.mongodb.com/ → Atlas → Clusters → Connect
+MONGODB_URI=mongodb+srv://<your-cluster>.mongodb.net/<db-name>?retryWrites=true&w=majority&appName=YourApp
 
-# Server Configuration
+# Database name for storing API keys (without trailing _keys automatically stripped)
+DATABASE_NAME=fal_mcp_keys
+
+# Fernet encryption key - MUST be set! Generate with:
+# python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+ENCRYPTION_KEY=...PASTE_GENERATED_KEY_HERE...
+
+# Server port (REQUIRED by Render)
+PORT=10000
+
+# Host for binding (REQUIRED by Render)
 HOST=0.0.0.0
-PORT=10000  # Render uses port 10000, not 8000
 
-# Optional: For twynity license server (if applicable)
-API_KEY=<your-twynity-api-key-if-required>
+# Optional: Set to production for custom headers/service id suffix
+ENVIRONMENT=production
 
-# How to generate ENCRYPTION_KEY:
-# uv run python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())" >> .env
+# Optional: Custom service name
+FAL_MCP_NAME=fal-mcp
 
-# IMPORTANT NOTES FOR RENDER:
-# 1. MongoDB URI must include full connection string with authSource
-# 2. Use managed MongoDB (MongoDB Atlas) for production
-# 3. DO NOT commit actual values to git
-# 4. Render environment variables are case-sensitive
+# Optional: Base URL for MCP manifest
+PUBLIC_URL=https://your-app.render.com
+
+# Optional: Allowed CORS origins (use asterisk or specific domains)
+ALLOWED_ORIGINS=*
+
+# Set this to enable in production after key generation
+API_KEY_STORAGE_ENABLED=true

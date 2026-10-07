@@ -67,7 +67,34 @@ class ConnectionStore:
                 upsert=True
             )
         
-        return {"status": "saved"}
+        return {"status": "saved", "name": name}
+
+    async def list_api_keys(self) -> list[dict]:
+        """List all stored API keys (metadata only).
+        
+        Returns:
+            List of {"name": str, "modified": datetime} dicts
+        """
+        import pymongo
+        cursor = await self.collection.find(
+            {},  # No filter - return all
+            {
+                "_id": 0,
+                "name": 1,
+                "user_id": 1,
+                "modified": 1,
+            }
+        )
+        
+        keys = []
+        async for doc in cursor:
+            keys.append({
+                "name": doc.get("name", ""),
+                "user_id": doc.get("user_id"),
+                "modified": doc.get("modified"),
+            })
+        
+        return keys
 
     async def get_api_key(self, name: str) -> dict[str, Any] | None:
         """Retrieve and decrypt the stored API key.

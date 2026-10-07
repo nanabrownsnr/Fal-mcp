@@ -1,6 +1,6 @@
 """Configure Fal MCP environment and logging."""
 
-import logging
+import os
 from dotenv import load_dotenv
 from pydantic_settings import BaseSettings
 
@@ -9,7 +9,8 @@ load_dotenv()
 
 def configured_mcp_name():
     """Return default service name until customizing."""
-    return "fal-mcp" or os.getenv("FAL_MCP_NAME", "").strip() or "starter"
+    name = os.getenv("FAL_MCP_NAME", "starter").strip() or "starter"
+    return "fal-mcp" if not name else name
 
 
 def configure_logging():
@@ -39,7 +40,8 @@ def configure_logging():
 class Settings(BaseSettings):
     """Environment settings for Fal MCP server."""
     
-    SERVICE_ID: str = configured_mcp_name().replace(" ", "") + "_dev" if not os.getenv("ENVIRONMENT") else f"{configured_mcp_name()}_{{os.getenv('ENVIRONMENT', 'development')}}"
+    SERVICE_ID: str = (f"{configured_mcp_name()}_dev" if not os.getenv("ENVIRONMENT")
+                      else f"{configured_mcp_name()}_{os.getenv('ENVIRONMENT', 'development')}")
     APP_TITLE: str = "Fal MCP Server - AI Models"
     APP_VERSION: str = "1.0.0"
     ENVIRONMENT: str = os.getenv("ENVIRONMENT", "development")
@@ -51,9 +53,9 @@ class Settings(BaseSettings):
         f"http://localhost:{os.getenv('PORT', '8000')}"
     )
     
-    # MongoDB storage for keys
-    MONGODB_URI: str = os.getenv("MONGODB_URI", "mongodb://mongo:27017")
-    DATABASE_NAME: str = os.getenv("MONGODB_DATABASE", "fal_mcp_keys")
+    # MongoDB storage for keys - accepts both DATABASE_NAME and MONGODB_DATABASE env vars
+    MONGODB_URI: str = os.getenv("MONGODB_URI", "mongodb://localhost:27017")
+    DATABASE_NAME: str = os.getenv("DATABASE_NAME", os.getenv("MONGODB_DATABASE", "fal_mcp_keys"))
     ENCRYPTION_KEY: str
 
     # Optional reporting (replace with your endpoint)

@@ -3,16 +3,8 @@
 ## ✅ Quick Start
 
 ```bash
-# 1. Use the Render-specific Dockerfile
-docker build -f Dockerfile.render -t fal-mcp-render .
-
-# 2. Push to your own registry (or use Docker Hub)
-docker push fal-mcp-render:latest
-
-# 3. On Render dashboard:
-#    - Build command: docker build -f Dockerfile.render .
-#    - Start command: uvicorn app.main:mcp --host 0.0.0.0 --port $SERVER_PORT
-#    - Add environment variables (see below)
+# 1. Build using main Dockerfile (no separate Render file needed)
+docker build -t fal-mcp-render .
 ```
 
 ## Environment Variables for Render
@@ -28,7 +20,7 @@ Add these to Render Dashboard **before deployment**:
 | `HOST` | `0.0.0.0` | Always 0.0.0.0 for public access |
 | `PORT` | `10000` | Render uses port 10000, not 8000! |
 
-### Optional (If using twynity):
+### Optional (For twynity or custom URLs):
 | Variable | Value |
 |----------|-------|
 | `ACCOUNT_SERVICE_URL` | `https://account-service.onrender.com` |
@@ -39,7 +31,7 @@ Add these to Render Dashboard **before deployment**:
 
 ```bash
 # Run this command once (copy the output)
-uv run python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 ```
 
 ⚠️ **Never commit `.env` files** - Render manages secrets via their dashboard!
@@ -52,40 +44,12 @@ uv run python -c "from cryptography.fernet import Fernet; print(Fernet.generate_
 4. Copy connection string and paste into: `MONGODB_URI`
 5. Replace `<password>` with your database user password
 
-## Common Render Errors & Solutions
-
-### Error: "Exit code 128"
-
-**Cause**: MongoDB connection failed or wrong environment variables
-
-✅ **Solution**:
-```bash
-# Test locally first with proper env vars
-docker run --rm -e MONGODB_URI="your-connection-string" \
-    -e ENCRYPTION_KEY=<your-key> fal-mcp-render:latest
-```
-
-### Error: ImportError for fal module
-
-**Cause**: fal package not installed in venv
-
-✅ **Solution**: Edit Render → Settings → Build command:
-```bash
-docker build -f Dockerfile.render . && pip install fal>=1.60.0 || true
-```
-
-### Error: uvicorn not found
-
-**Cause**: uvicorn missing from dependencies
-
-✅ **Solution**: Ensure `uvicorn` is in pyproject.toml dependencies (it should be)
-
 ## Render Settings Checklist
 
-- [ ] Build Command: `docker build -f Dockerfile.render .`
-- [ ] Start Command: `uvicorn app.main:mcp --host 0.0.0.0 --port $SERVER_PORT`
+- [ ] **Build Command**: `docker build -t fal-mcp .` (uses main Dockerfile)
+- [ ] **Start Command**: `uvicorn app.main:mcp --host 0.0.0.0 --port $PORT`
 - [ ] Environment Variables configured (as table above)
-- [ ] Health check enabled (Render auto-detects at `/health`)
+- [ ] Health check enabled at `/api/v1/health` or `/api/v1/status`
 - [ ] Git ignore includes `.env`, `__pycache__`, node_modules
 - [ ] GitHub Actions workflows disabled (or skip the render.yml action)
 
@@ -98,39 +62,35 @@ If deployment fails, send them these logs:
 curl -s https://api.render.com/v1/apps/YOUR_APP_ID/logs
 
 # Or test locally with same env vars
-docker build -f Dockerfile.render -t fal-mcp-test .
-docker run --rm \
-  -p 8000:8000 \
-  -e MONGODB_URI="${MONGODB_URI}" \
-  -e ENCRYPTION_KEY="${ENCRYPTION_KEY}" \
-  fal-mcp-test:latest
+docker build -t fal-mcp-test .
+MONGODB_URI="your-connection-string" \
+ENCRYPTION_KEY="cGFzc3dvcmQxMjM=" \
+docker run --rm -p 8000:10000 fal-mcp-test:latest
 ```
 
 ## Testing Deployment Locally Before Render
 
 ```bash
-# Build locally
-docker build -f Dockerfile.render -t fal-mcp-render .
+# Build locally using main Dockerfile
+docker build -t fal-mcp-render .
 
-# Run with test environment
+# Run with test environment (localhost MongoDB or Atlas)
 MONGODB_URI="mongodb://localhost:27017/test" \
 ENCRYPTION_KEY="cGFzc3dvcmQxMjM=" \
-docker run --rm -p 8000:8000 fal-mcp-render:latest
-
-# If MongoDB fails, this will fail fast with helpful errors
+docker run --rm -p 8000:10000 fal-mcp-render:latest
 ```
 
 ## Troubleshooting Checklist
 
 - [ ] Did you use MongoDB Atlas (managed), not local `mongodb://host`?
 - [ ] Is `ENCRYPTION_KEY` properly generated (43 chars)?
-- [ ] Are you using `Dockerfile.render` (not the old one with `|| true`)?
+- [ ] Are you using the **main Dockerfile** (not an old one with `|| true`)?
 - [ ] Does MongoDB allow connections from Render's IP addresses?
 - [ ] Have you whitelisted Render IPs in MongoDB Atlas Network Access list?
 
 ## Whitelisting Render IPs in MongoDB Atlas
 
-Render connects from: `109.73.242.65/32` (and others)
+Render connects from various IPs: `109.73.242.65/32` (and others)
 
 1. Go to MongoDB Atlas → Network Access
 2. Add new IP whitelist entry

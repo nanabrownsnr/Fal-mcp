@@ -1,4 +1,4 @@
-# Stage 1: Build stage - install dependencies and copy source
+# Stage 1: Build dependencies with uv
 FROM python:3.12-slim AS builder
 
 WORKDIR /app
@@ -8,66 +8,69 @@ RUN apt-get update && apt-get install -y \
     gcc \
     && rm -rf /var/lib/apt/lists/*
 
-# Set environment variables
-ENV PIP_NO_CACHE_DIR=1 \
-    PIP_DISABLE_PIP_VERSION_CHECK=1 \
-    UV_COMPILE_FOR_BUILD=true \
-    UV_LINK_MODE=copy
+ENV UV_COMPILE_FOR_BUILD=true
+UV_LINK_MODE=copy
 
-# Install Python dependencies with uv (or pip)
-COPY pyproject.toml .
-RUN if [ ! -f "venv" ]; then pip install uv; fi && \
-    python -m venv /app/venv
+# Copy lock file and pyproject.toml
+COPY pyproject.toml uv.lock* ./
 
-# Stage 2: Final runtime image
-FROM python:3.12-slim
+# Install dependencies into base Python installation (no venv for runtime)
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
+    pip install --no-cache-dir -e . --break-system-packages 2>&1 || true
+
+# Stage 2: Runtime image
+FROM python:3.12-slim as runtime
 
 WORKDIR /app
 
-# Copy venv from builder or create new
-COPY --from=builder /app/venv /app/venv
+# Install production dependencies into /usr/local/lib/python* (not virtualenv)
+RUN apt-get update && apt-get install -y gcc \
+    && rm -rf /var/lib/apt/lists/*
 
-ENV PATH="/app/venv/bin:$PATH" \
-    PYTHONUNBUFFERED=1
-
-# Copy source code and dependencies - copy everything except hidden files
-RUN mkdir -p /app && cp -r app/ tests/ docs/ /app/. 2>&1 >/dev/null || true
-
-# Install runtime dependencies only (no dev deps)
+COPY --from=builder /usr/local/lib/python*/site-packages /usr/local/lib/python*/site-packages 2>/dev/null || true
 COPY pyproject.toml .
-RUN pip install --prefix=/app --no-warn-script-location -e '.' 2>/dev/null || \
-    pip install --prefix=/app --no-warn-script-location \
-        "cryptography>=50.0.1" \
-        "fastmcp==3.4.5" \
-        "fal" \
-        "httpx==0.28.1" \
-        "pydantic-settings==2.14.2" \
-        "python-dotenv==1.2.2" \
-        "pymongo>=4.18.0" \
-        "starlette==1.3.1" \
-        "uvicorn==0.51.0" 2>/dev/null || true
+RUN pip install --no-cache-dir uvicorn[standard] fal pymongo cryptography fastmcp \
+        httpx starlette pydantic-settings python-dotenv \
+        && rm -rf /root/.cache
 
-# Set environment configuration from build args and env vars
-ARG HOST=${HOST:-0.0.0.0} \
+# Copy application source code
+COPY app/ ./app/
+COPY tests/ ./tests/ 2>/dev/null || true
+COPY docs/ ./docs/ 2>/dev/null || true
+COPY .env.example ./.env.example
+
+# Create app directory and copy UI if exists
+RUN mkdir -p /app/frontend/assets && \
+    if [ -d "app/ui" ]; then cp -r app/ui/* /app/frontend/assets/ 2>/dev/null || true; fi
+
+# Copy UI component Vue file (not the whole ui folder)
+COPY app/ui/*.vue /app/frontend/assets/ 2>/dev/null || true
+
+# Create virtual environment for optional local development or fallback
+RUN python -m venv /app/venv
+
+# Set up logging directory
+RUN mkdir -p /app/logs && \
+    chown -R "$(whoami)" /app
+
+# Configure environment variables
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    HOST=${HOST:-0.0.0.0} \
     PORT=${PORT:-8000} \
-    DATABASE_NAME=${DATABASE_NAME:-fal_mcp_keys} \
-    ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-*}
+    ENVIRONMENT=${ENVIRONMENT:-development} \
+    PUBLIC_URL=${PUBLIC_URL:-http://$(hostname -i || echo "localhost"):$PORT}
 
-ENV HOST=${HOST} \
-    PORT=${PORT} \
-    MONGODB_URI=${MONGODB_URI:-mongodb://localhost:27017} \
-    DATABASE_NAME=${DATABASE_NAME} \
-    ALLOWED_ORIGINS=${ALLOWED_ORIGINS}
+# Set health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD python -c "import requests; requests.get('http://localhost:8000/api/v1/health', timeout=5)" || exit 1
 
-# Copy UI assets only if directory exists (ignore errors)
-RUN mkdir -p /app/frontend/assets && cp -r app/ui/* /app/frontend/assets/ 2>/dev/null || true
-
-# Non-root user for security
+# Run as non-root user
 RUN useradd --create-home --shell /bin/bash faluser && \
     chown -R faluser:faluser /app
 
 USER faluser
 
-EXPOSE 8000
+EXPOSE ${PORT:-8000}
 
-CMD ["uvicorn", "app.main:mcp", "--host", "0.0.0.0", "--port", "$PORT"]
+CMD ["uvicorn", "app.main:mcp", "--host", "${HOST:-0.0.0.0}", "--port", "${PORT:-8000}"]

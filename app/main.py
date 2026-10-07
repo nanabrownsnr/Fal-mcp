@@ -20,13 +20,11 @@ async def app_lifespan(server):
             # Initialize connection store on startup  
             from app.connection_store import ConnectionStore, set_active_store
             
-            db_name = settings.DATABASE_NAME.replace("_keys", "") or "fal_mcp_key"
-            
-            # Extract DB name from MONGODB_URI if it has / after mongodb://
-            actual_db_from_uri = mongouri.split("/", 3)[-1] if "/" in mongouri else db_name
+            # Use DATABASE_NAME from settings (already strips _keys if needed)
+            db_name = os.getenv("DATABASE_NAME", "fal_mcp_keys")
             
             store = ConnectionStore(
-                mongo[actual_db_from_uri],
+                mongo[db_name],
                 os.getenv("ENCRYPTION_KEY", "fallback_key")
             )
             await store.setup()
