@@ -30,7 +30,6 @@ def get_auth_provider() -> JWTVerifier:
     return JWTVerifier(
         jwks_uri=settings.account_jwks_url,
         algorithm="RS256",
-        audience=settings.SERVICE_ID,
     )
 
 
