@@ -1,0 +1,41 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Virtual environments
+.venv/
+env/
+ENV/
+
+# Environment files (never commit these!)
+.env
+.env.local
+.env.*.local
+
+# MongoDB data
+mongodump*/
+bsonfiles/
+
+# IDE, editor, and text editors
+.idea/
+.vscode/**
+*.swp
+*.swo
+*~
+.DS_Store
+
+# OS generated notes, etc
+*.log
+logs/*.log
+
+# Docker / containers
+docker-compose.override.yml
+.env.dockerfile.*
+
+# Generated files that should be excluded from source control
+dist/
+build/
+*/__pycache__/
+node_modules/
+.npm/

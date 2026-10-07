@@ -1,0 +1,55 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+
+# Environment variables
+.env
+.env.*.local
+
+# Database files
+mongodump*/
+bsonfiles/
+
+# IDE, editor, and text editors
+.idea/
+.vscode/**
+*.swp
+*.swo
+*~
+.DS_Store
+
+# OS generated notes, etc
+*.log
+logs/*.log
+
+# Docker / containers
+docker-compose.override.yml
+.env.dockerfile.*
+
+# Node / npm (if applicable)
+node_modules/
+.npm/
+npm-debug.log*
+
+# Git
+.git/
+.gitignore
+
+# Test coverage and reports
+htmlcov/
+.coverage
+
+# Build outputs
+build/
+dist/
+
+# macOS
+.DS_Store

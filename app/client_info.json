@@ -1,0 +1,8 @@
+{
+  "name": "Fal MCP Client",
+  "version": "1.0.0",
+  "dependencies": {
+    "fal-client": "latest"
+  },
+  "notes": "Use fal.Client() for API calls; credentials stored via /api/v1/keys endpoint with JWT auth."
+}
