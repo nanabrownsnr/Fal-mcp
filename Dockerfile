@@ -42,18 +42,15 @@ COPY tests/ ./tests/ 2>/dev/null || true
 COPY docs/ ./docs/ 2>/dev/null || true
 COPY .env.example ./.env.example
 
-# Create runtime venv for consistency with build process
-RUN python -m venv /app/.venv && \
-    mv /app/.venv /usr/local/lib/python3.12/site-packages/fal-mcp-runtime-venv 2>/dev/null || true
-
-# Copy UI assets if they exist
-RUN mkdir -p /app/ui/frappe_ui/dist && \
-    if [ -d "app/ui" ]; then cp -r app/ui/* /app/ui/frappe_ui/ 2>/dev/null || true; fi
+# Create UI assets directory and copy Vue files if they exist
+RUN mkdir -p /app/ui/dist && \
+    if [ -d "app/ui" ]; then cp -r app/ui/*.vue /app/ui/dist/ 2>/dev/null || true; fi
 
 # Set up logging directory
-RUN mkdir -p /app/logs
+RUN mkdir -p /app/logs && \
+    chown -R "$(whoami)" /app
 
-# Configure environment variables (no shell commands or complex expressions)
+# Configure environment variables
 ENV HOST_HOST=${HOST:-0.0.0.0} \
     PORT_HOST=${PORT:-8000} \
     ENVIRONMENT=development \
@@ -62,7 +59,7 @@ ENV HOST_HOST=${HOST:-0.0.0.0} \
     DATABASE_NAME=fal_mcp_keys \
     ALLOWED_ORIGINS=*
 
-# Set health check (works with /api/v1/health and /api/v1/status endpoints)
+# Set health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD python -c "import requests; requests.get('http://localhost:8000/api/v1/health', timeout=5)" || exit 1
 
