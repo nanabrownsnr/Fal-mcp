@@ -1,23 +1,20 @@
-# Builds the MCP App and production Python runtime using Vite for frontend
+# Builds the MCP App and production Python runtime. Update the UI COPY paths
+# when renaming the example; generated dist/ files stay out of source control.
 FROM node:22-alpine AS ui-builder
 
 WORKDIR /ui
 
-# Install Node dependencies and build UI with Vite
-COPY app/ui/package.json ./
-RUN npm ci --no-audit --no-fund 2>/dev/null || echo "No node modules to install"
+COPY app/ui/frappe_ui/package.json ./
+RUN npm ci --no-audit --no-fund
 
-COPY app/ui/index.html \
-     app/ui/vite.config.ts \
-     app/ui/tsconfig.json \
-     app/ui/*.vue \
-     app/ui/main.js \
-     app/ui/globals.css \
-     app/ui/.gitignore \
-     ./src/ 2>/dev/null || true
+COPY app/ui/frappe_ui/index.html \
+     app/ui/frappe_ui/vite.config.ts \
+     app/ui/frappe_ui/tsconfig.json \
+     app/ui/frappe_ui/App.vue \
+     app/ui/frappe_ui/*.css \
+     ./
 
-RUN npm run build \
-  && cp -r app/ui/dist/* /ui/
+RUN npm run build
 
 
 FROM python:3.12-slim
@@ -39,8 +36,8 @@ COPY app/ ./app/
 COPY tests/ ./tests/ 2>/dev/null || true
 COPY docs/ ./docs/ 2>/dev/null || true
 
-# Copy built UI assets
-COPY --from=ui-builder /ui/dist /app/frontend/assets
+# Copy built UI assets from frappe_ui dist folder
+COPY --from=ui-builder /ui/dist /app/ui/frappe_ui/dist
 
 # Create and use non-root user for security
 RUN useradd -m appuser && chown -R appuser:appuser /app
