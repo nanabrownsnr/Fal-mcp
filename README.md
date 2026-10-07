@@ -1,108 +1,54 @@
-# Fal MCP — AI Model API Caller 🚀
+# Fal MCP
 
-A FastMCP server for calling AI models via the **fal.ai** API with encrypted credential storage per user.
+A FastMCP server that invokes fal.ai models using credentials configured for
+the active Twynity project. Credentials are encrypted in MongoDB and scoped to
+the verified `(user_id, persona_id)` identity.
 
-## What This Server Does
+## Runtime configuration
 
-- Stores encrypted API keys per `(user_id, persona_id)` in MongoDB  
-- Provides tools to call fal.ai's model endpoints
-- Simple UI for viewing tool outputs
-- Twynity-compatible authentication model with JWT verification
-
-## Quick Start
-
-### 1. Environment Setup
+Copy `.env.example` to `.env` and set the required MongoDB URI, Fernet
+`ENCRYPTION_KEY`, and account service URL. Generate a Fernet key with:
 
 ```bash
-# Copy this file and fill in actual values
-mv .env.example .env
-
-# Run these commands to generate encryption key:
-uv run python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())" >> .env
+python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 ```
 
-### 2. Install Dependencies
+Install dependencies and start the HTTP MCP app:
 
 ```bash
 uv sync --locked
+uv run uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 
-### 3. Run Development Server
+The service verifies MCP bearer tokens against the configured account-service
+JWKS. Custom configuration routes independently verify the token and require
+the `Persona-Id` header. Twynity must forward both headers for MCP App calls.
 
-```bash
-uv run uvicorn app.main:mcp --host 0.0.0.0 --port 8000
-```
+## Configure a fal.ai connection
 
-## fal.ai Model API Reference
-
-- [fal.ai Docs](https://fal.ai/docs/model-api-reference)
-- Example call:
-  ```python
-  from fal import Client
-  client = Client()
-  result = client.invoke(
-      model="fal-ai/llama3",
-      input={"prompt": "Write a haiku about AI"},
-  )
-  print(result["output"])
-  ```
-
-## Docker Deployment
-
-Build locally:
-
-```bash
-docker build -t fal-mcp .
-docker run --rm -p 8000:8000 \
-  -e MONGODB_URI=mongodb://host:port \
-  -e ENCRYPTION_KEY=your-generated-fernet-key \
-  fal-mcp
-```
-
-Deploy with Kubernetes compose pattern from template.
-
-## Storage Contract
-
-API keys are stored encrypted per user/persona in MongoDB for secure multi-tenant deployment.
-
-### POST `/api/v1/keys`
+Send an authenticated request to `POST /api/v1/configuration`:
 
 ```json
-{
-  "name": "GitHub-PAT",
-  "key": "ghp_xxxxxxxxxxxxxx"
-}
+{"name":"fal.ai","api_key":"<your fal.ai key>"}
 ```
 
-## Project Structure
+The key is encrypted before storage. Configuration GET routes return metadata
+only. The `invoke_fal_model` tool retrieves the key for the verified active
+project and invokes the supplied model ID and JSON arguments. The default
+model is `fal-ai/flux/schnell`; set `DEFAULT_FAL_MODEL` to override it.
 
-```
-FalMCP/
-├── app/
-│   ├── main.py              # FastMCP server entry point
-│   ├── config.py            # Environment settings and logging
-│   ├── auth.py              # JWT verification layer
-│   ├── connection_store.py  # Encrypted credential storage
-│   ├── twynity.py           # HTTP routes for /api/v1/keys
-│   ├── tweenit.py           # fal.ai client helper
-│   └── ui/
-│       └── model_view.vue   # UI scaffold component
-├── tests/
-│   ├── conftest.py          # Pytest fixtures
-│   └── test_keys.py         # Key management tests
-├── docs/
-│   └── API_REFERENCE.md     # fal.ai Model API guide
-├── .dockerignore            # Docker build exclusions
-├── Dockerfile               # Multi-stage production image
-├── pyproject.toml           # Dependencies and tool config
-└── README.md                # This file
-```
+## HTTP routes
 
-## License
+- `GET /api/v1/.well-known/mcp.json` — public Twynity service manifest.
+- `GET /api/v1/schema` — connection configuration schema.
+- `POST /api/v1/configuration` — authenticated project-scoped credential upsert.
+- `GET /api/v1/configuration` — authenticated safe metadata response.
+- `GET /api/v1/external-connection/me` — authenticated connection status.
+- `GET /api/v1/health` — public liveness check.
 
-MIT — See `LICENSE` if added later
+## Docker and Render
 
----
-
-**Status**: ✅ Ready for fal.ai integration and deployment  
-**GitHub**: [nanabrownsnr/Fal-mcp](https://github.com/nanabrownsnr/Fal-mcp)
+The Dockerfile installs the locked Python dependencies, copies the app source,
+runs as a non-root user, and starts the exported ASGI app on `0.0.0.0:$PORT`.
+For Render Web Services, configure the required variables and set the health
+check path to `/api/v1/health`. See [RENDER_DEPLOY.md](RENDER_DEPLOY.md).

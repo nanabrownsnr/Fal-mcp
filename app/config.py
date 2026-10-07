@@ -1,72 +1,64 @@
-"""Configure Fal MCP environment and logging."""
+"""Typed runtime configuration for the Fal MCP service."""
 
-import os
+from functools import lru_cache
+
 from dotenv import load_dotenv
-from pydantic_settings import BaseSettings
+from pydantic import Field, model_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 load_dotenv()
 
 
-def configured_mcp_name():
-    """Return default service name until customizing."""
-    name = os.getenv("FAL_MCP_NAME", "starter").strip() or "starter"
-    return "fal-mcp" if not name else name
-
-
-def configure_logging():
-    """Set up logging to files and console."""
-    from datetime import date
-    os.makedirs("./logs", exist_ok=True)
-    
-    formatter = logging.Formatter(
-        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-    )
-    
-    root_logger = logging.getLogger()
-    root_logger.setLevel(logging.DEBUG)
-    
-    log_file = f"./logs/{configured_mcp_name()}_{date.today().strftime('%Y%m%d')}.log"
-    file_handler = logging.FileHandler(log_file)
-    file_handler.setFormatter(formatter)
-    file_handler.setLevel(logging.INFO)
-    root_logger.addHandler(file_handler)
-    
-    console_handler = logging.StreamHandler()
-    console_handler.setFormatter(formatter)
-    console_handler.setLevel(logging.INFO)
-    root_logger.addHandler(console_handler)
-
-
 class Settings(BaseSettings):
-    """Environment settings for Fal MCP server."""
-    
-    SERVICE_ID: str = (f"{configured_mcp_name()}_dev" if not os.getenv("ENVIRONMENT")
-                      else f"{configured_mcp_name()}_{os.getenv('ENVIRONMENT', 'development')}")
-    APP_TITLE: str = "Fal MCP Server - AI Models"
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore", case_sensitive=False)
+
+    SERVICE_ID: str = "fal_mcp"
+    APP_TITLE: str = "Fal MCP"
     APP_VERSION: str = "1.0.0"
-    ENVIRONMENT: str = os.getenv("ENVIRONMENT", "development")
+    ENVIRONMENT: str = "production"
+    HOST: str = "0.0.0.0"
+    PORT: int = 8000
+    PUBLIC_URL: str = "http://localhost:8000"
     ALLOWED_ORIGINS: str = "*"
 
-    # Fal client endpoint  
-    PUBLIC_URL: str = os.getenv(
-        "PUBLIC_URL",
-        f"http://localhost:{os.getenv('PORT', '8000')}"
-    )
-    
-    # MongoDB storage for keys - accepts both DATABASE_NAME and MONGODB_DATABASE env vars
-    MONGODB_URI: str = os.getenv("MONGODB_URI", "mongodb://localhost:27017")
-    DATABASE_NAME: str = os.getenv("DATABASE_NAME", os.getenv("MONGODB_DATABASE", "fal_mcp_keys"))
+    MONGODB_URI: str
+    DATABASE_NAME: str = "fal_mcp"
     ENCRYPTION_KEY: str
 
-    # Optional reporting (replace with your endpoint)
-    USAGE_REPORT_ENDPOINT: str = os.getenv("USAGE_REPORT_ENDPOINT", "")
-    
+    ACCOUNT_SERVICE_URL: str
+    ACCOUNT_SERVICE_JWKS_ENDPOINT: str = "/.well-known/jwks.json"
+    ACCOUNT_SERVICE_JWKS_CACHE_TTL: int = Field(default=600, ge=0)
+    PERSONA_ID_HEADER: str = "Persona-Id"
+
+    USAGE_REPORT_ENDPOINT: str = ""
+    DEFAULT_FAL_MODEL: str = "fal-ai/flux/schnell"
+    LICENSE_ENFORCEMENT_ENABLED: bool = False
+    LICENSE_KEY: str = ""
+    LICENSE_SERVER_BASE_URL: str = ""
+    LICENSE_SERVER_JWKS_ENDPOINT: str = "/.well-known/jwks.json"
+    LICENSE_SERVER_ACTIVATION_ENDPOINT: str = "/api/v1/activations"
+
+    @model_validator(mode="after")
+    def require_license_configuration_when_enabled(self) -> "Settings":
+        if self.LICENSE_ENFORCEMENT_ENABLED and not (
+            self.LICENSE_KEY and self.LICENSE_SERVER_BASE_URL
+        ):
+            raise ValueError(
+                "LICENSE_KEY and LICENSE_SERVER_BASE_URL are required when license enforcement is enabled"
+            )
+        return self
+
     @property
-    def service_short(self) -> str:
-        """Return short name for API calls."""
-        return self.APP_TITLE.replace(" ", "-").lower()
+    def account_jwks_url(self) -> str:
+        return (
+            f"{self.ACCOUNT_SERVICE_URL.rstrip('/')}/"
+            f"{self.ACCOUNT_SERVICE_JWKS_ENDPOINT.lstrip('/')}"
+        )
 
 
-settings = Settings()
+@lru_cache(maxsize=1)
+def get_settings() -> Settings:
+    return Settings()
 
-configure_logging()
+
+settings = get_settings()

@@ -1,32 +1,20 @@
-"""Example tests for MCP app contract. Use pytest to run these."""
+"""Optional manual fal-client smoke check; pytest must never call billable APIs."""
 
-import fal
+import os
 
-def test_fal_invoke_simple():
-    """Test invoking a simple model via fal.ai client."""
-    client = fal.Client()
-    result = client.invoke(
-        "fal-ai/llama3",
-        input={"prompt": "Hello"},
+from fal_client import SyncClient
+
+
+def main() -> None:
+    api_key = os.environ.get("FAL_KEY")
+    if not api_key:
+        raise SystemExit("Set FAL_KEY before running this manual smoke check")
+    result = SyncClient(api_key).subscribe(
+        "fal-ai/flux/schnell",
+        {"prompt": "A small red fox in a field of flowers", "image_size": "square"},
     )
-    assert "output" in result
-    
-def test_fal_invoke_with_params():
-    """Test invoking with additional parameters."""
-    client = fal.Client()
-    result = client.invoke(
-        "fal-ai/stable-diffusion-v1",
-        input={
-            "text_prompts": [{"prompt": "robot cat"}],
-        },
-        params={"images_per_prompt": 1},
-    )
-    
-def test_error_handling():
-    """Test that errors are caught and reported."""
-    client = fal.Client()
-    try:
-        # This will fail in production with network, mock for testing
-        result = client.invoke("invalid-model", input={})
-    except Exception as e:
-        assert isinstance(e, Exception)
+    print(result)
+
+
+if __name__ == "__main__":
+    main()

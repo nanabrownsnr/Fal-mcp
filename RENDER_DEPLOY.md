@@ -1,105 +1,50 @@
-# Render Deployment Guide for Fal MCP
+# Deploy Fal MCP on Render
 
-## ✅ Quick Start
+Create a Render **Web Service** using the repository's Dockerfile. Leave the
+Build Command and Start Command empty so Render builds the image and uses its
+Docker `CMD`. The container binds to `0.0.0.0` and reads Render's `PORT`
+environment variable (Render's default is `10000`).
 
-```bash
-# 1. Build using main Dockerfile (no separate Render file needed)
-docker build -t fal-mcp-render .
-```
+## Required environment variables
 
-## Environment Variables for Render
+Set these in the Render dashboard. Do not commit actual credentials.
 
-Add these to Render Dashboard **before deployment**:
+| Variable | Purpose |
+| --- | --- |
+| `MONGODB_URI` | MongoDB connection URI, including Atlas credentials if applicable |
+| `DATABASE_NAME` | Database name, for example `fal_mcp` |
+| `ENCRYPTION_KEY` | Stable Fernet key used to encrypt stored fal.ai keys |
+| `ACCOUNT_SERVICE_URL` | Twynity account service base URL |
+| `SERVICE_ID` | JWT audience configured for this MCP, default `fal_mcp` |
+| `PUBLIC_URL` | Public Render URL used in the MCP manifest |
 
-### Required (Must configure in Render Dashboard):
-| Variable | Value Example | Where to Get It |
-|----------|---------------|-----------------|
-| `MONGODB_URI` | `mongodb+srv://user:pass@cluster.mongodb.net/db?retryWrites=true&w=majority` | MongoDB Atlas connection string |
-| `DATABASE_NAME` | `fal_mcp_keys` | Your Atlas database name |
-| `ENCRYPTION_KEY` | `gAAAAAB...` (base64, 43 chars) | Generate with Python command below |
-| `HOST` | `0.0.0.0` | Always 0.0.0.0 for public access |
-| `PORT` | `10000` | Render uses port 10000, not 8000! |
+`ACCOUNT_SERVICE_JWKS_ENDPOINT` defaults to `/.well-known/jwks.json`. The
+service also accepts `ACCOUNT_SERVICE_JWKS_CACHE_TTL`, `PERSONA_ID_HEADER`,
+`ALLOWED_ORIGINS`, `DEFAULT_FAL_MODEL`, and an optional full URL for
+`USAGE_REPORT_ENDPOINT`. Optional license enforcement is disabled by default;
+to enable it, set `LICENSE_ENFORCEMENT_ENABLED=true`, `LICENSE_KEY`, and
+`LICENSE_SERVER_BASE_URL` (the JWKS and activation paths have defaults).
 
-### Optional (For twynity or custom URLs):
-| Variable | Value |
-|----------|-------|
-| `ACCOUNT_SERVICE_URL` | `https://account-service.onrender.com` |
-| `PUBLIC_URL` | `https://your-app.onrender.com` |
-| `ALLOWED_ORIGINS` | `*` or your specific domains |
-
-## How to Generate ENCRYPTION_KEY
+Generate the encryption key locally with:
 
 ```bash
-# Run this command once (copy the output)
 python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 ```
 
-⚠️ **Never commit `.env` files** - Render manages secrets via their dashboard!
+Keep that key stable after deployment. Replacing it makes previously stored
+fal.ai credentials unreadable. Configure Render's health check path as
+`/api/v1/health`.
 
-## MongoDB Atlas Setup (Required for Production)
+## Configure fal.ai
 
-1. Go to [MongoDB Atlas](https://www.mongodb.com/cloud/atlas/)
-2. Create free cluster (M0 tier)
-3. Click "Connect" → "Connect your application"
-4. Copy connection string and paste into: `MONGODB_URI`
-5. Replace `<password>` with your database user password
+Twynity must send a valid account-service bearer JWT and the active
+`Persona-Id` header. Configure each project's fal.ai credentials with an
+authenticated `POST /api/v1/configuration` request:
 
-## Render Settings Checklist
-
-- [ ] **Build Command**: `docker build -t fal-mcp .` (uses main Dockerfile)
-- [ ] **Start Command**: `uvicorn app.main:mcp --host 0.0.0.0 --port $PORT`
-- [ ] Environment Variables configured (as table above)
-- [ ] Health check enabled at `/api/v1/health` or `/api/v1/status`
-- [ ] Git ignore includes `.env`, `__pycache__`, node_modules
-- [ ] GitHub Actions workflows disabled (or skip the render.yml action)
-
-## Debug Commands for Render Support Team
-
-If deployment fails, send them these logs:
-
-```bash
-# Get container logs from Render API
-curl -s https://api.render.com/v1/apps/YOUR_APP_ID/logs
-
-# Or test locally with same env vars
-docker build -t fal-mcp-test .
-MONGODB_URI="your-connection-string" \
-ENCRYPTION_KEY="cGFzc3dvcmQxMjM=" \
-docker run --rm -p 8000:10000 fal-mcp-test:latest
+```json
+{"name":"fal.ai","api_key":"<project fal.ai key>"}
 ```
 
-## Testing Deployment Locally Before Render
-
-```bash
-# Build locally using main Dockerfile
-docker build -t fal-mcp-render .
-
-# Run with test environment (localhost MongoDB or Atlas)
-MONGODB_URI="mongodb://localhost:27017/test" \
-ENCRYPTION_KEY="cGFzc3dvcmQxMjM=" \
-docker run --rm -p 8000:10000 fal-mcp-render:latest
-```
-
-## Troubleshooting Checklist
-
-- [ ] Did you use MongoDB Atlas (managed), not local `mongodb://host`?
-- [ ] Is `ENCRYPTION_KEY` properly generated (43 chars)?
-- [ ] Are you using the **main Dockerfile** (not an old one with `|| true`)?
-- [ ] Does MongoDB allow connections from Render's IP addresses?
-- [ ] Have you whitelisted Render IPs in MongoDB Atlas Network Access list?
-
-## Whitelisting Render IPs in MongoDB Atlas
-
-Render connects from various IPs: `109.73.242.65/32` (and others)
-
-1. Go to MongoDB Atlas → Network Access
-2. Add new IP whitelist entry
-3. Use Render's network range or allow all (0.0.0.0/0 for dev)
-
----
-
-## Need Help?
-
-- Render Docs: https://render.com/docs/troubleshooting-deploys
-- Connection String Builder: https://mongodb.com/cloud/atlas/begin/setup-database/
-- Pydantic Settings: https://docs.pydantic.dev/latest/concepts/pydantic_settings/
+The API key is encrypted in MongoDB and is never returned by configuration GET
+routes. The `invoke_fal_model` MCP tool uses the credentials belonging to the
+verified user/persona pair.

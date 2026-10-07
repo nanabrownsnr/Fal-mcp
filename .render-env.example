@@ -1,35 +1,27 @@
-# Render Environment Variables
-# Copy these to your Render Dashboard → Environment section
-# Required: All variables must be set for proper deployment
+# Copy values into the Render service's Environment page. Never commit real secrets.
+MONGODB_URI=mongodb+srv://<user>:<password>@<cluster>/<database>?retryWrites=true&w=majority
+DATABASE_NAME=fal_mcp
+ENCRYPTION_KEY=<generated-Fernet-key>
 
-# MongoDB Atlas Connection String (without auth token in public repos)
-# Get this from: https://cloud.mongodb.com/ → Atlas → Clusters → Connect
-MONGODB_URI=mongodb+srv://<your-cluster>.mongodb.net/<db-name>?retryWrites=true&w=majority&appName=YourApp
+SERVICE_ID=fal_mcp
+ACCOUNT_SERVICE_URL=https://twynity-dev.api.4th-ir.com/account
+ACCOUNT_SERVICE_JWKS_ENDPOINT=/.well-known/jwks.json
+ACCOUNT_SERVICE_JWKS_CACHE_TTL=600
+PERSONA_ID_HEADER=Persona-Id
 
-# Database name for storing API keys (without trailing _keys automatically stripped)
-DATABASE_NAME=fal_mcp_keys
-
-# Fernet encryption key - MUST be set! Generate with:
-# python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
-ENCRYPTION_KEY=...PASTE_GENERATED_KEY_HERE...
-
-# Server port (REQUIRED by Render)
-PORT=10000
-
-# Host for binding (REQUIRED by Render)
 HOST=0.0.0.0
-
-# Optional: Set to production for custom headers/service id suffix
+PORT=10000
+PUBLIC_URL=https://<your-render-service>.onrender.com
+ALLOWED_ORIGINS=*
 ENVIRONMENT=production
 
-# Optional: Custom service name
-FAL_MCP_NAME=fal-mcp
+# Optional reporting endpoint, must be a complete URL if set.
+USAGE_REPORT_ENDPOINT=
+DEFAULT_FAL_MODEL=fal-ai/flux/schnell
 
-# Optional: Base URL for MCP manifest
-PUBLIC_URL=https://your-app.render.com
-
-# Optional: Allowed CORS origins (use asterisk or specific domains)
-ALLOWED_ORIGINS=*
-
-# Set this to enable in production after key generation
-API_KEY_STORAGE_ENABLED=true
+# Optional. Set to true only after configuring a valid key and service URL.
+LICENSE_ENFORCEMENT_ENABLED=false
+LICENSE_KEY=
+LICENSE_SERVER_BASE_URL=
+LICENSE_SERVER_JWKS_ENDPOINT=/.well-known/jwks.json
+LICENSE_SERVER_ACTIVATION_ENDPOINT=/api/v1/activations

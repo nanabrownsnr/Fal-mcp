@@ -1,22 +1,31 @@
-version: '3.8'
-
 services:
   fal-mcp-server:
     build: .
     ports:
       - "8000:8000"
     environment:
-      - ENVIRONMENT=production
-      - PUBLIC_URL=https://your-domain.com
-      - MONGODB_URI=mongodb://mongo:27017
-      - MONGODB_DATABASE=fal_mcp_keys
-      - ENCRYPTION_KEY=${ENCRYPTION_KEY}
-      - USAGE_REPORT_ENDPOINT=
-    volumes:
-      # Mount logs for monitoring
-      - fal-mcp-logs:/app/logs
-      # Can mount custom code if needed (comment out in prod)
-      # - .:/app
+      HOST: 0.0.0.0
+      PORT: 8000
+      MONGODB_URI: ${MONGODB_URI:-mongodb://mongo:27017}
+      DATABASE_NAME: ${DATABASE_NAME:-fal_mcp}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?Set ENCRYPTION_KEY in your environment or .env}
+      SERVICE_ID: ${SERVICE_ID:-fal_mcp}
+      ACCOUNT_SERVICE_URL: ${ACCOUNT_SERVICE_URL:?Set ACCOUNT_SERVICE_URL}
+      ACCOUNT_SERVICE_JWKS_ENDPOINT: ${ACCOUNT_SERVICE_JWKS_ENDPOINT:-/.well-known/jwks.json}
+      ACCOUNT_SERVICE_JWKS_CACHE_TTL: ${ACCOUNT_SERVICE_JWKS_CACHE_TTL:-600}
+      PERSONA_ID_HEADER: ${PERSONA_ID_HEADER:-Persona-Id}
+      PUBLIC_URL: ${PUBLIC_URL:-http://localhost:8000}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-*}
+      USAGE_REPORT_ENDPOINT: ${USAGE_REPORT_ENDPOINT:-}
+      DEFAULT_FAL_MODEL: ${DEFAULT_FAL_MODEL:-fal-ai/flux/schnell}
+      LICENSE_ENFORCEMENT_ENABLED: ${LICENSE_ENFORCEMENT_ENABLED:-false}
+      LICENSE_KEY: ${LICENSE_KEY:-}
+      LICENSE_SERVER_BASE_URL: ${LICENSE_SERVER_BASE_URL:-}
+      LICENSE_SERVER_JWKS_ENDPOINT: ${LICENSE_SERVER_JWKS_ENDPOINT:-/.well-known/jwks.json}
+      LICENSE_SERVER_ACTIVATION_ENDPOINT: ${LICENSE_SERVER_ACTIVATION_ENDPOINT:-/api/v1/activations}
+    depends_on:
+      mongo:
+        condition: service_healthy
 
   mongo:
     image: mongo:7.0
@@ -24,7 +33,11 @@ services:
       - "27017:27017"
     volumes:
       - mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
 
 volumes:
-  fal-mcp-logs:
   mongo-data:

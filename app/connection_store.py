@@ -1,119 +1,82 @@
-"""Encrypted API key storage per (user_id, persona_id) pair."""
+"""Encrypted MongoDB storage, strictly scoped to a user/persona pair."""
 
 from datetime import UTC, datetime
-from typing import Any, Optional
-from cryptography.fernet import Fernet
+from typing import Any
+
+from bson import ObjectId
+from cryptography.fernet import Fernet, InvalidToken
+from pymongo import ASCENDING
+
+
+_active_store: "ConnectionStore | None" = None
+
+
+def set_active_store(store: "ConnectionStore | None") -> None:
+    global _active_store
+    _active_store = store
+
+
+def get_active_store() -> "ConnectionStore | None":
+    return _active_store
 
 
 class ConnectionStore:
-    """MongoDB-backed encrypted API key storage."""
+    """Store encrypted connector values for exactly one Twynity project."""
 
-    def __init__(self, collection, encryption_key):
+    def __init__(self, collection: Any, encryption_key: str):
         self.collection = collection
         self.cipher = Fernet(encryption_key.encode("ascii"))
 
     async def setup(self) -> None:
-        """Create compound unique index on (name, user_id) to prevent duplicate keys."""
-        import pymongo
         await self.collection.create_index(
-            [("name", pymongo.ASCENDING), ("user_id", pymongo.ASCENDING)], 
-            unique=True
+            [("user_id", ASCENDING), ("persona_id", ASCENDING)], unique=True
         )
 
-    async def save_api_key(self, name: str, key_value: str, user_id: str = None) -> dict[str, Any]:
-        """Encrypt and store API key for (user_id, name) pair.
-        
-        Args:
-            name: Source name (e.g., "GitHub PAT")
-            key_value: The raw API key to encrypt
-            user_id: Optional user identifier from auth
-            
-        Returns:
-            {"status": "saved|updated"}
-        """
+    async def save(self, user_id: str, persona_id: str, values: dict[str, str]) -> None:
         now = datetime.now(UTC)
-        
-        # Encrypt the key value before storage
-        encrypted_api_key = self.cipher.encrypt(key_value.encode("utf-8")).decode("ascii")
-        
-        query = {"name": name}
-        
-        if user_id:
-            # Update or insert for specific user
-            result = await self.collection.update_one(
-                query,
-                {
-                    "$setOnInsert": {
-                        "user_id": str(user_id),
-                        "persona_id": "_default_",
-                        "created": now,
-                    },
-                    "$set": {"value": encrypted_api_key, "modified": now},
-                },
-                upsert=True
-            )
-        else:
-            # Legacy behavior: just store by name (simplified)
-            result = await self.collection.find_one_and_update(
-                query,
-                {
-                    "$set": {
-                        "user_id": str(__import__('bson').ObjectId()),
-                        "persona_id": "_default_",
-                        "value": encrypted_api_key,
-                        "modified": now,
-                    }
-                },
-                upsert=True
-            )
-        
-        return {"status": "saved", "name": name}
-
-    async def list_api_keys(self) -> list[dict]:
-        """List all stored API keys (metadata only).
-        
-        Returns:
-            List of {"name": str, "modified": datetime} dicts
-        """
-        import pymongo
-        cursor = await self.collection.find(
-            {},  # No filter - return all
+        encrypted = {
+            field: self.cipher.encrypt(value.encode("utf-8")).decode("ascii")
+            for field, value in values.items()
+        }
+        await self.collection.update_one(
+            {"user_id": user_id, "persona_id": persona_id},
             {
-                "_id": 0,
-                "name": 1,
-                "user_id": 1,
-                "modified": 1,
-            }
+                "$set": {"values": encrypted, "modified": now},
+                "$setOnInsert": {"created": now},
+            },
+            upsert=True,
         )
-        
-        keys = []
-        async for doc in cursor:
-            keys.append({
-                "name": doc.get("name", ""),
-                "user_id": doc.get("user_id"),
-                "modified": doc.get("modified"),
-            })
-        
-        return keys
 
-    async def get_api_key(self, name: str) -> dict[str, Any] | None:
-        """Retrieve and decrypt the stored API key.
-        
-        Args:
-            name: Service name to look up
-            
-        Returns:
-            {{"name": str, "key": str}} or None if not found
-        """
-        document = await self.collection.find_one({"name": name})
-        
+    async def get(self, user_id: str, persona_id: str) -> dict[str, str] | None:
+        document = await self.collection.find_one(
+            {"user_id": user_id, "persona_id": persona_id}
+        )
         if not document:
             return None
-        
         try:
-            # Decrypt and return clean result (without internal storage structure)
-            api_key = self.cipher.decrypt(document.get("value", "").encode("ascii")).decode("utf-8")
-            
-            return {"name": name, "key": api_key}
-        except Exception as exc:
-            raise RuntimeError(f"Failed to decrypt key {name}") from exc
+            return {
+                field: self.cipher.decrypt(value.encode("ascii")).decode("utf-8")
+                for field, value in document.get("values", {}).items()
+            }
+        except (InvalidToken, KeyError, TypeError) as exc:
+            raise RuntimeError("Stored credentials cannot be decrypted; check ENCRYPTION_KEY") from exc
+
+    async def public_metadata(self, user_id: str, persona_id: str) -> dict[str, Any] | None:
+        document = await self.collection.find_one(
+            {"user_id": user_id, "persona_id": persona_id},
+            {"values.name": 1, "created": 1, "modified": 1},
+        )
+        if not document:
+            return None
+        values = document.get("values", {})
+        safe_values: dict[str, str] = {}
+        for field in ("name",):
+            encrypted = values.get(field)
+            if encrypted:
+                safe_values[field] = self.cipher.decrypt(encrypted.encode("ascii")).decode("utf-8")
+        return {
+            "id": str(document.get("_id", ObjectId())),
+            **safe_values,
+            "created": document.get("created").isoformat() if document.get("created") else None,
+            "modified": document.get("modified").isoformat() if document.get("modified") else None,
+        }

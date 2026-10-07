@@ -1,6 +1,15 @@
 """Pytest fixtures for Fal MCP tests."""
 
+import os
+
 import pytest
+
+# Keep module imports deterministic without connecting to production services.
+os.environ.setdefault("MONGODB_URI", "mongodb://localhost:27017")
+os.environ.setdefault("ACCOUNT_SERVICE_URL", "https://account.invalid")
+os.environ.setdefault(
+    "ENCRYPTION_KEY", "MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDA="
+)
 
 
 @pytest.fixture
