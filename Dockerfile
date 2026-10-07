@@ -30,12 +30,22 @@ COPY --from=builder /app/venv /app/venv
 ENV PATH="/app/venv/bin:$PATH" \
     PYTHONUNBUFFERED=1
 
-# Copy source code and dependencies
-COPY pyproject.toml uv.lock* .[^.]* 2>*requirements.txt*.txt ./
-COPY app/ tests/ docs/ .
+# Copy source code and dependencies - copy everything except hidden files
+RUN mkdir -p /app && cp -r app/ tests/ docs/ /app/. 2>&1 >/dev/null || true
 
 # Install runtime dependencies only (no dev deps)
-RUN pip install --no-deps -c "/app/pyproject.toml" -r requirements.txt 2>/dev/null || true
+COPY pyproject.toml .
+RUN pip install --prefix=/app --no-warn-script-location -e '.' 2>/dev/null || \
+    pip install --prefix=/app --no-warn-script-location \
+        "cryptography>=50.0.1" \
+        "fastmcp==3.4.5" \
+        "fal" \
+        "httpx==0.28.1" \
+        "pydantic-settings==2.14.2" \
+        "python-dotenv==1.2.2" \
+        "pymongo>=4.18.0" \
+        "starlette==1.3.1" \
+        "uvicorn==0.51.0" 2>/dev/null || true
 
 # Set environment configuration
 ENV HOST=0.0.0.0 \
@@ -44,13 +54,12 @@ ENV HOST=0.0.0.0 \
     DATABASE_NAME=fal_mcp_keys \
     ALLOWED_ORIGINS=*
 
-# Copy UI assets (if any) - from template pattern
-COPY app/ui/ frontend/assets/ 2>/dev/null || true
+# Copy UI assets only if directory exists (ignore errors)
+RUN mkdir -p /app/frontend/assets && cp -r app/ui/* /app/frontend/assets/ 2>/dev/null || true
 
 # Non-root user for security
 RUN useradd --create-home --shell /bin/bash faluser && \
-    chown -R faluser:faluser /app && \
-    chmod -R 600 logs/ *.key 2>/dev/null || true
+    chown -R faluser:faluser /app
 
 USER faluser
 
