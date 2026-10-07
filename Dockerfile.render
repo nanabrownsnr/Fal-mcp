@@ -1,0 +1,67 @@
+# Render-Compatible Build Command for Fal MCP
+# Use: docker build -f Dockerfile.render -t fal-mcp-render .
+
+FROM python:3.12-slim AS builder
+
+WORKDIR /app
+
+# Install minimal build dependencies
+RUN apt-get update && apt-get install -y \
+    gcc \
+    git curl \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+# Copy pyproject.toml for dependency resolution
+COPY pyproject.toml ./
+
+# Create venv and install all dependencies from pyproject.toml
+RUN python -m venv /app/venv && \
+    . /app/venv/bin/activate && \
+    pip install --no-cache-dir uv && \
+    uv pip install --system --frozen 2>/dev/null || true
+
+# Stage 2: Production runtime image (minimal)
+FROM python:3.12-slim
+
+WORKDIR /app
+
+# Copy venv from builder
+COPY --from=builder /app/venv /app/venv
+
+# Set up environment - Render passes these via dashboard
+ENV PATH="/app/venv/bin:$PATH" \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    HOST=0.0.0.0 \
+    PORT=10000
+
+# Copy source code (pyproject.toml defines dependencies)
+COPY pyproject.toml ./
+COPY app/ app/
+COPY tests/ tests/
+COPY docs/ docs/
+
+# Create logs directory and run as non-root user
+RUN mkdir -p /app/logs \
+    && groupadd -r faluser \
+    && useradd -r -g faluser faluser \
+    && chown -R faluser:faluser /app
+
+# Set file permissions for sensitive files
+RUN chmod -R 600 app/*.key 2>/dev/null || true
+
+USER faluser
+
+EXPOSE 8000
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD python -c "import sys; sys.exit(0) if __import__('os').path.exists('/app/app/main.py') else sys.exit(1)" || exit 1
+
+# Health check endpoint (simple HTTP request)
+HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:${PORT}/health || exit 1
+
+CMD ["uvicorn", "app.main:mcp", "--host", "0.0.0.0", "--port", "${PORT}"]

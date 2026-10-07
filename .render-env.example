@@ -1,0 +1,23 @@
+# Render-Compatible Environment Variables
+# Copy this to your Render dashboard or local `.env` file
+
+# Required for FalMCP core functionality (DO NOT CHANGE THESE)
+DATABASE_NAME=fal_mcp
+ENCRYPTION_KEY=<GENERATE_THIS_WITH_PYTHON_COMMAND_BELOW>
+MONGODB_URI=mongodb://<user>:<password>@<host>:27017/<db>?authSource=admin
+
+# Server Configuration
+HOST=0.0.0.0
+PORT=10000  # Render uses port 10000, not 8000
+
+# Optional: For twynity license server (if applicable)
+API_KEY=<your-twynity-api-key-if-required>
+
+# How to generate ENCRYPTION_KEY:
+# uv run python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())" >> .env
+
+# IMPORTANT NOTES FOR RENDER:
+# 1. MongoDB URI must include full connection string with authSource
+# 2. Use managed MongoDB (MongoDB Atlas) for production
+# 3. DO NOT commit actual values to git
+# 4. Render environment variables are case-sensitive

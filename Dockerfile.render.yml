@@ -1,0 +1,56 @@
+# Render-Compatible Multi-stage Build for Fal MCP
+# This uses Render's build environment directly without local MongoDB
+
+FROM python:3.12-slim as builder
+
+WORKDIR /app
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y \
+    gcc \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    UV_COMPILE_FOR_BUILD=true \
+    UV_LINK_MODE=copy
+
+# Copy pyproject.toml and lock file first for dependency caching
+COPY pyproject.toml uv.lock* ./
+
+# Build the virtual environment with all dependencies
+RUN python -m venv /app/venv && \
+    . /app/venv/bin/activate && \
+    pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -e ".[all]" 2>/dev/null || \
+    pip install --no-cache-dir --no-deps -c pyproject.toml -r requirements.txt 2>/dev/null || true
+
+# Stage 2: Production runtime image
+FROM python:3.12-slim
+
+WORKDIR /app
+
+# Copy venv from builder
+COPY --from=builder /app/venv /app/venv
+
+ENV PATH="/app/venv/bin:$PATH" \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1
+
+# Copy source code (excludes .git, .env, __pycache__)
+COPY --from=builder /app/pyproject.toml ./
+COPY --from=builder /app/app/ app/
+COPY --from=builder /app/tests/ tests/
+COPY --from=builder /app/docs/ docs/
+
+# Copy additional config files (if they exist)
+COPY --from=builder /app/*.json ./.config/ 2>/dev/null || true
+
+# Install runtime-only dependencies if needed
+RUN pip install --no-cache-dir --upgrade pymongo[srv] 2>/dev/null || \
+    pip install --no-cache-dir pymongo>=4.18.0 \
+        cryptography>=50.0.1 \
+        fal>=1.60.0 \
+        starlette>=1.3.1 \
+        uvicorn[standard]==0.

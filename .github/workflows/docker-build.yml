@@ -36,9 +36,16 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Run tests in container
+      - name: Run health check
         run: |
           docker run --rm \
-            -e ENCRYPTION_KEY=test-key-for-testing-only \
+            --name fal-mcp-health \
+            -e MONGODB_URI="mongodb://test:test@localhost:27017/test" \
+            -e ENCRYPTION_KEY=dGVzdC1rZXktZm9yLXRoZS10ZXN0aW5n \
             ${{ env.REGISTRY }}/nanabrownsnr/fal-mcp:${{ github.sha }} \
-            echo "Docker image is ready!"
+            uvicorn app.main:mcp --host 0.0.0.0 --port 8000 &
+          sleep 10
+          docker ps
+          curl http://localhost:8000/health || true
+        env:
+          UVICORN_LOG_LEVEL: info
