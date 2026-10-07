@@ -1,0 +1,30 @@
+version: '3.8'
+
+services:
+  fal-mcp-server:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - ENVIRONMENT=production
+      - PUBLIC_URL=https://your-domain.com
+      - MONGODB_URI=mongodb://mongo:27017
+      - MONGODB_DATABASE=fal_mcp_keys
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY}
+      - USAGE_REPORT_ENDPOINT=
+    volumes:
+      # Mount logs for monitoring
+      - fal-mcp-logs:/app/logs
+      # Can mount custom code if needed (comment out in prod)
+      # - .:/app
+
+  mongo:
+    image: mongo:7.0
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+
+volumes:
+  fal-mcp-logs:
+  mongo-data:
