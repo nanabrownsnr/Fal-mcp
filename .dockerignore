@@ -53,3 +53,10 @@ dist/
 
 # macOS
 .DS_Store
+
+# EXCLUDE .env but include source code structure
+.env
+.env.*.local
+
+# Include all Python source (don't exclude *.py as it breaks imports)
+# (*.py[cod] should not catch valid .py files for startup)
