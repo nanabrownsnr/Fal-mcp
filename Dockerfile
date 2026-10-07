@@ -4,14 +4,17 @@ FROM node:22-alpine AS ui-builder
 WORKDIR /ui
 
 # Install Node dependencies and build UI with Vite
-COPY app/ui/package.json app/ui/package-lock.json ./ 2>/dev/null || true
+COPY app/ui/package.json ./
 RUN npm ci --no-audit --no-fund 2>/dev/null || echo "No node modules to install"
 
 COPY app/ui/index.html \
      app/ui/vite.config.ts \
      app/ui/tsconfig.json \
      app/ui/*.vue \
-     app/ui/src/ ./src/ 2>/dev/null || true
+     app/ui/main.js \
+     app/ui/globals.css \
+     app/ui/.gitignore \
+     ./src/ 2>/dev/null || true
 
 RUN npm run build \
   && cp -r app/ui/dist/* /ui/
