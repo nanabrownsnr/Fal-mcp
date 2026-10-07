@@ -47,12 +47,17 @@ RUN pip install --prefix=/app --no-warn-script-location -e '.' 2>/dev/null || \
         "starlette==1.3.1" \
         "uvicorn==0.51.0" 2>/dev/null || true
 
-# Set environment configuration
-ENV HOST=0.0.0.0 \
-    PORT=8000 \
-    MONGODB_URI=mongodb://mongo:27017 \
-    DATABASE_NAME=fal_mcp_keys \
-    ALLOWED_ORIGINS=*
+# Set environment configuration from build args and env vars
+ARG HOST=${HOST:-0.0.0.0} \
+    PORT=${PORT:-8000} \
+    DATABASE_NAME=${DATABASE_NAME:-fal_mcp_keys} \
+    ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-*}
+
+ENV HOST=${HOST} \
+    PORT=${PORT} \
+    MONGODB_URI=${MONGODB_URI:-mongodb://localhost:27017} \
+    DATABASE_NAME=${DATABASE_NAME} \
+    ALLOWED_ORIGINS=${ALLOWED_ORIGINS}
 
 # Copy UI assets only if directory exists (ignore errors)
 RUN mkdir -p /app/frontend/assets && cp -r app/ui/* /app/frontend/assets/ 2>/dev/null || true
